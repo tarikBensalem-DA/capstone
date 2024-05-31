@@ -1,0 +1,146 @@
+module Script where
+
+import Main
+import Daml.Script
+import DA.Time
+import DA.Date
+
+-- Task Tracker Ledger Initialization Script
+setup : Script TaskId
+setup = script do
+
+-- Allocate parties and give human readable names
+  tarik <- allocatePartyWithHint "Tarik" (PartyIdHint "Tarik")
+  cristina <- allocatePartyWithHint "Cristina" (PartyIdHint "Cristina")
+  laura <- allocatePartyWithHint "Laura" (PartyIdHint "Laura")
+
+  tarikId <- validateUserId "Tarik"
+  cristinaId <- validateUserId "Cristina"
+  lauraId <- validateUserId "Laura"
+
+--  Create users for the parties
+  createUser (User tarikId (Some tarik)) [CanActAs tarik]
+  createUser (User cristinaId (Some cristina)) [CanActAs cristina]
+  createUser (User lauraId (Some laura)) [CanActAs laura]
+
+-- Two sample contracts
+  studyDataStructures <- submit tarik do
+    createCmd TaskTracker with
+      performer = tarik
+      projectId = "test1"
+      description = "Studying DSA"
+      startTime = time (date 2024 Apr 4) 14 30 05
+      endTime = time (date 2024 Apr 5) 14 30 05
+      followers = []
+
+  cristinaStudying <- submit cristina do
+    createCmd TaskTracker with 
+      performer = cristina
+      projectId = "test2"
+      description = "Researching User Experience"
+      startTime = time (date 2023 May 4) 14 30 05
+      endTime = time (date 2023 May 5) 14 30 05
+      followers = []
+
+-- RUNS TESTS AGAINST THE TASK TRACKER TEMPLATE INITIALIZED ABOVE
+
+  -- Tests updating end time
+  tarikStudying <- submit tarik do
+    exerciseCmd studyDataStructures UpdateEndTime with newEndTime = time (date 2024 Apr 7) 14 30 05
+
+  -- Tests updating end time to an invalid time (Should and does fail)
+  submitMustFail tarik do
+    exerciseCmd tarikStudying UpdateEndTime with newEndTime = time (date 2020 Apr 6) 13 29 03
+
+  -- Tests adding a new follower
+  newFollow <- submit tarik do
+    exerciseCmd tarikStudying ShareTask with newFollower = cristina
+
+  -- Adds an unrelated party to share logged values with
+  newFollow2 <- submit tarik do
+    exerciseCmd newFollow ShareTask with newFollower = laura
+
+  -- Tests attempting to follow the same user twice (Should and does fail)
+  submitMustFail tarik do
+    exerciseCmd newFollow2 ShareTask with newFollower = cristina
+
+  -- Tests attempting to follow yourself (Should and does fail)
+  submitMustFail tarik do
+    exerciseCmd newFollow2 ShareTask with newFollower = tarik
+
+  -- -- Tests updating task description
+  submit cristina do
+    exerciseCmd cristinaStudying UpdateDescription with newDesc = "Studying System Design"
+
+  -- Tests ending the task immediately (Doesn't work in sandbox mode because system time is set 1970)
+  -- submit tarik do
+  --   exerciseCmd newFollow2 EndNow
+
+-- Time Log Ledger Initialization Script
+log : Script SummaryId
+log = script do
+
+-- Allocate parties and give human readable names
+  tarik <- allocatePartyWithHint "Tarik" (PartyIdHint "Tarik")
+  cristina <- allocatePartyWithHint "Cristina" (PartyIdHint "Cristina")
+  laura <- allocatePartyWithHint "Laura" (PartyIdHint "Laura")
+
+  tarikId <- validateUserId "Tarik"
+  cristinaId <- validateUserId "Cristina"
+  lauraId <- validateUserId "Laura"
+
+--  Create users for the parties
+  createUser (User tarikId (Some tarik)) [CanActAs tarik]
+  createUser (User cristinaId (Some cristina)) [CanActAs cristina]
+  createUser (User lauraId (Some laura)) [CanActAs laura]
+
+-- Sample Contracts
+  logFirstTask <- submit tarik do
+    createCmd TimeLogEntry with
+      performer = tarik
+      times = [(time (date 2023 May 4) 14 30 05, time (date 2023 May 5) 14 30 05)]
+      taskId = "Study"
+      followers = []
+
+  logNewTask <- submit laura do
+    createCmd TimeLogEntry with
+      performer = laura
+      times = [(time (date 2023 Jun 4) 14 30 05, time (date 2023 Jun 5) 14 30 05)]
+      taskId = "Gym"
+      followers = []
+
+  logThirdTask <- submit cristina do
+    createCmd TimeLogEntry with
+      performer = cristina
+      times = [(time (date 2023 Jul 4) 14 30 05, time (date 2023 Jul 5) 14 30 05)]
+      taskId = "Dance"
+      followers = []
+
+-- RUN TESTS AGAINS THE TIME LOG TEMPLATE
+  -- Tests adding times to Study task
+  addTimeStudyTask <- submit tarik do
+    exerciseCmd logFirstTask AddTimes with newTimes = (time (date 2023 May 6) 14 30 05, time (date 2023 May 7) 14 30 05)
+
+  -- Tests adding another set of times to Study task
+  addTimeStudyTaskCont <- submit tarik do
+    exerciseCmd addTimeStudyTask AddTimes with newTimes = (time (date 2023 May 8) 14 30 05, time (date 2023 May 9) 14 30 05)
+
+  -- Tests adding times to Gym task
+  addTimeGymTask <- submit laura do
+    exerciseCmd logNewTask AddTimes with newTimes = (time (date 2023 Jun 6) 14 30 05, time (date 2023 Jun 7) 14 30 05)
+
+  -- Tests adding a follower to Gym task
+  addGymFollower <- submit laura do
+    exerciseCmd addTimeGymTask ShareLogs with newFollower = tarik
+
+  -- Tests adding a same follower to Gym task twice (Should and does fail)
+  submitMustFail laura do
+    exerciseCmd addGymFollower ShareLogs with newFollower = tarik
+
+  -- Tests someone without permissions adding a follower (Should and does fail)
+  submitMustFail tarik do
+    exerciseCmd addGymFollower ShareLogs with newFollower = laura
+
+  -- Tests adding times to Dance task
+  submit cristina do
+    exerciseCmd logThirdTask AddTimes with newTimes = (time (date 2023 Aug 6) 14 30 05, time (date 2023 Aug 7) 14 30 05)

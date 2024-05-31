@@ -1,0 +1,73 @@
+module Modularized where
+
+import Main
+import Daml.Script
+import DA.Time
+import DA.Date
+
+
+data SquadOfParties = SquadOfParties 
+  with
+    tarik : Party
+    cristina : Party
+    laura : Party
+  deriving (Eq, Show)
+
+modularize : Script SquadOfParties
+modularize = do
+  -- Allocate parties and give human readable names
+  tarik <- allocatePartyWithHint "Tarik" (PartyIdHint "Tarik")
+  cristina <- allocatePartyWithHint "Cristina" (PartyIdHint "Cristina")
+  laura <- allocatePartyWithHint "Laura" (PartyIdHint "Laura")
+
+  tarikId <- validateUserId "Tarik"
+  cristinaId <- validateUserId "Cristina"
+  lauraId <- validateUserId "Laura"
+
+--  Create users for the parties
+  createUser (User tarikId (Some tarik)) [CanActAs tarik]
+  createUser (User cristinaId (Some cristina)) [CanActAs cristina]
+  createUser (User lauraId (Some laura)) [CanActAs laura]
+
+  return $ SquadOfParties with
+    tarik = tarik
+    cristina = cristina
+    laura = laura
+
+-- Two sample contracts
+createContract1: Party -> Script (ContractId TaskTracker)
+createContract1 tarik = do
+  submit tarik do
+    createCmd TaskTracker with
+      performer = tarik
+      projectId = "test1"
+      description = "Studying DSA"
+      startTime = time (date 2024 Apr 4) 14 30 05
+      endTime = time (date 2024 Apr 5) 14 30 05
+      followers = []
+
+createContract2: Party -> Script (ContractId TaskTracker)
+createContract2 cristina = do
+  submit cristina do
+    createCmd TaskTracker with 
+      performer = cristina
+      projectId = "test2"
+      description = "Researching User Experience"
+      startTime = time (date 2023 May 4) 14 30 05
+      endTime = time (date 2023 May 5) 14 30 05
+      followers = []
+
+areYouPopular : (HasField "followers" r [a], Show r) => r -> Either Text Bool
+areYouPopular task = do
+  debug $ show task
+  if length (task.followers) <= 0 then Left "You are not popular"
+  else if length (task.followers) < 2 then Left "You are somewhat popular"
+  else if length (task.followers) >= 2 then Right True
+  else Left "You are not popular"
+
+findTask taskId = do
+  query @TaskTracker taskId
+
+whoAreYourFriends squad =
+  let friendNames = map show squad
+  in foldl (\acc name -> acc <> " and " <> name) "" friendNames <> " are friends"

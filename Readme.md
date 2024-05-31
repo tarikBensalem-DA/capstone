@@ -1,0 +1,1 @@
+This project is designed to create a task tracker, and includes features to follow your friends tasks, and have them follow yours.

@@ -1,0 +1,96 @@
+module Main where
+
+type TaskId = ContractId TaskTracker
+type SummaryId = ContractId TimeLogEntry
+
+template TaskTracker
+  with 
+    performer : Party
+    projectId : Text
+    description : Text
+    startTime : Time
+    endTime : Time
+    followers : [Party]
+  where
+    signatory performer
+    observer followers
+    key (performer, projectId) : (Party, Text)
+    maintainer key._1
+    ensure startTime <= endTime
+
+    -- Change ownership
+    choice UpdatePerformer : TaskId
+      with
+        newPerformer : Party
+      controller performer
+        do
+          create this with 
+            performer = newPerformer
+
+    -- Manually submit an end time
+    choice UpdateEndTime : TaskId
+        with
+          newEndTime : Time
+        controller performer
+          do
+            create this with endTime = newEndTime
+
+    -- Automatically submit an end time
+    choice EndNow : TaskId
+      controller performer
+        do
+          currTime <- getTime
+          create this with
+            endTime = currTime
+
+    -- Updates task description
+    choice UpdateDescription : TaskId
+      with
+        newDesc : Text
+      controller performer
+        do
+          create this with
+            description = newDesc
+
+    -- Shares task with user of your choice
+    choice ShareTask : TaskId
+      with
+        newFollower : Party
+      controller performer
+        do
+          assertMsg "You cannot follow yourself!" (newFollower /= performer)
+          assertMsg "You are already following that user!" (newFollower `notElem` followers)
+          create this with
+            followers = newFollower :: followers
+
+template TimeLogEntry
+  with
+    times : [(Time, Time)]
+    performer : Party
+    taskId : Text
+    followers : [Party]
+  where
+    signatory performer
+    observer followers
+    key (performer, taskId) : (Party, Text)
+    maintainer key._1
+
+    -- Add another Start:End Tuple to the array of Tuples
+    choice AddTimes : SummaryId
+      with
+        newTimes : (Time, Time)
+      controller performer
+        do
+          create this with
+            times = newTimes :: times
+
+    -- Share logs (Array of Tuples) with another user
+    nonconsuming choice ShareLogs : SummaryId
+      with
+        newFollower : Party
+      controller performer
+        do
+          assertMsg "You cannot follow yourself!" (newFollower /= performer)
+          assertMsg "You are already following that user!" (newFollower `notElem` followers)
+          create this with
+            followers = newFollower :: followers
